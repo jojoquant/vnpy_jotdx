@@ -15,7 +15,8 @@ from vnpy.trader.datafeed import BaseDatafeed
 
 def trans_datetime_range_to_start_count(start: datetime, end: datetime, interval: Interval):
     datetime_range_days = (end - start).days
-    now_to_end_days = (datetime.now() - end).days
+    now = datetime.now().replace(tzinfo=end.tzinfo)
+    now_to_end_days = (now - end).days
     count = datetime_range_days if datetime_range_days < 7 else (datetime_range_days * 5 / 7)
     count_offset = now_to_end_days if now_to_end_days < 7 else (now_to_end_days * 5 / 7)
 
