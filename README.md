@@ -1,1 +1,6 @@
-# vnpy_jotdx
+vnpy_jotdx
+
+### Installation
+```
+pip install vnpy-jotdx
+```
