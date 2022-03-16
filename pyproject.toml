@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vnpy_jotdx"
-version = "0.1.2"
+version = "0.1.3"
 description = ""
 authors = ["FangyangJz <fangyang.jing@hotmail.com>"]
 

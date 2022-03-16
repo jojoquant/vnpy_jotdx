@@ -119,6 +119,57 @@ class JotdxDatafeed(BaseDatafeed):
 
         return data
 
+    def query_bar_df_history(self, req: HistoryRequest) -> Optional[List[BarData]]:
+        """
+        查询K线数据
+        start 和 end 时间定位是不精确的
+        """
+        if not self.inited:
+            self.init()
+
+        code = req.symbol
+        category = INTERVAL_TDX_MAP[req.interval]
+        market = self.markets[self.markets['name'] == EXCHANGE_NAME_MAP[req.exchange]]["market"].iat[0]
+        start = req.start
+        end = req.end
+
+        count_offset, count = trans_datetime_range_to_start_count(start, end, req.interval)
+        COUNT_MAX = 700
+
+        if count <= COUNT_MAX:
+            data = self.api.get_instrument_bars(
+                category=category, market=market, code=code,
+                start=count_offset, count=count
+            )
+        else:
+            data = []
+            while count > COUNT_MAX:
+                data = self.api.get_instrument_bars(
+                    category=category, market=market, code=code,
+                    start=count_offset, count=COUNT_MAX
+                ) + data
+                count -= COUNT_MAX
+                count_offset += COUNT_MAX
+
+            if count > 0:
+                data = self.api.get_instrument_bars(
+                    category=category, market=market, code=code,
+                    start=count_offset, count=count
+                ) + data
+
+        data: pd.DataFrame = self.api.to_df(data)
+        data.rename(
+            columns={
+                "open": "open_price",
+                "high": "high_price",
+                "low": "low_price",
+                "close": "close_price",
+                "trade": "volume",
+                "position": "open_interest",
+            }, inplace=True
+        )
+        return data
+
     def query_tick_history(self, req: HistoryRequest) -> Optional[List[TickData]]:
         """查询Tick数据"""
         if not self.inited:
@@ -157,6 +208,7 @@ if __name__ == '__main__':
 
     # 获取k线历史数据
     data = datafeed.query_bar_history(bar_req)
+    data_df = datafeed.query_bar_df_history(bar_req)
     print(1)
     # 获取tick历史数据
     # data = datafeed.query_tick_history(tick_req)
