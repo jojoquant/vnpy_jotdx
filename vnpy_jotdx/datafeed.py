@@ -7,7 +7,7 @@ from jotdx.exhq import TdxExHq_API
 from jotdx.utils.best_ip_async import select_best_ip_async
 
 from joconst.maps import EXCHANGE_NAME_MAP, INTERVAL_TDX_MAP
-from joconst.constant import Exchange, Interval
+from joconst.constant import Exchange, Interval, TdxMarket, TdxCategory
 from joconst.object import BarData, TickData, HistoryRequest
 
 from vnpy.trader.datafeed import BaseDatafeed
@@ -59,15 +59,23 @@ class JotdxDatafeed(BaseDatafeed):
         self.inited: bool = False
         self.api = None
         self.markets: pd.DataFrame = None
+        self.future_market_category_list = [
+            (TdxMarket.DCE, TdxCategory.DCE),
+            (TdxMarket.SHFE, TdxCategory.SHFE),
+            (TdxMarket.CZCE, TdxCategory.CZCE),
+            (TdxMarket.CFFEX, TdxCategory.CFFEX),
+        ]
 
     def init(self) -> bool:
         """初始化"""
         if self.inited:
             return True
 
-        best_ip_port_dict = select_best_ip_async(_type='future')
-        self.api = TdxExHq_API()
-        self.api.connect(ip=best_ip_port_dict['ip'], port=best_ip_port_dict['port'])
+        future_best_ip_port_dict = select_best_ip_async(_type='future')
+        # stock_best_ip_port_dict = select_best_ip_async(_type='stock')
+
+        self.api = TdxExHq_API(heartbeat=True)
+        self.api.connect(ip=future_best_ip_port_dict['ip'], port=future_best_ip_port_dict['port'])
         self.markets = self.api.to_df(self.api.get_markets())
         self.inited = True
         return True
@@ -110,16 +118,9 @@ class JotdxDatafeed(BaseDatafeed):
                     start=count_offset, count=count
                 ) + data
 
-        # r1 = self.api.to_df(self.api.get_instrument_bars(TDXParams.KLINE_TYPE_DAILY, market, symbol, 0, 100))
-        # r2_list = self.api.get_instrument_bars(
-        #     category=TDXParams.KLINE_TYPE_1MIN, market=market, code=code, start=0, count=700)
-        # r2 = self.api.to_df(r2_list)
-        # r3 = self.api.to_df(self.api.get_instrument_bars(TDXParams.KLINE_TYPE_1MIN, market, code, 0, 100))
-        # rr = self.api.to_df(self.api.get_history_transaction_data(market, code, 20220308, count=1800))
-
         return data
 
-    def query_bar_df_history(self, req: HistoryRequest) -> Optional[List[BarData]]:
+    def query_bar_df_history(self, req: HistoryRequest) -> pd.DataFrame:
         """
         查询K线数据
         start 和 end 时间定位是不精确的
@@ -157,8 +158,8 @@ class JotdxDatafeed(BaseDatafeed):
                     start=count_offset, count=count
                 ) + data
 
-        data: pd.DataFrame = self.api.to_df(data)
-        data.rename(
+        data_df: pd.DataFrame = self.api.to_df(data)
+        data_df.rename(
             columns={
                 "open": "open_price",
                 "high": "high_price",
@@ -168,8 +169,9 @@ class JotdxDatafeed(BaseDatafeed):
                 "position": "open_interest",
             }, inplace=True
         )
-        return data
+        return data_df
 
+    # TODO
     def query_tick_history(self, req: HistoryRequest) -> Optional[List[TickData]]:
         """查询Tick数据"""
         if not self.inited:
@@ -178,6 +180,23 @@ class JotdxDatafeed(BaseDatafeed):
         data: List[TickData] = []
 
         return data
+
+    def query_contract_df(self, market=TdxMarket.DCE, category=TdxCategory.DCE):
+        contract_df = pd.DataFrame()
+        start = 0
+        while True:
+            r = self.api.to_df(self.api.get_instrument_quote_list(market, category, start=start))
+            start += len(r)
+            if len(r) == 0:
+                break
+            contract_df = pd.concat([contract_df, r])
+        return contract_df
+
+    def query_all_contracts_df(self):
+        all_contracts_df = pd.DataFrame()
+        for market, category in self.future_market_category_list:
+            all_contracts_df = pd.concat([all_contracts_df, self.query_contract_df(market, category)])
+        return all_contracts_df
 
     def close(self):
         self.api.disconnect()
@@ -207,8 +226,17 @@ if __name__ == '__main__':
     datafeed.init()
 
     # 获取k线历史数据
-    data = datafeed.query_bar_history(bar_req)
-    data_df = datafeed.query_bar_df_history(bar_req)
+    # data = datafeed.query_bar_history(bar_req)
+    # data_df = datafeed.query_bar_df_history(bar_req)
+
+    # 获取合约数据
+    # datafeed.query_contract_df()
+    df = datafeed.query_all_contracts_df()
+    for idx, ss in df[df['code'].str.contains('L8')][['market', 'code']].iterrows():
+        market1 = ss['market']
+        code1 = ss['code']
+        print(1)
     print(1)
+
     # 获取tick历史数据
     # data = datafeed.query_tick_history(tick_req)
