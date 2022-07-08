@@ -17,9 +17,12 @@ from vnpy.trader.datafeed import BaseDatafeed
 
 
 def trans_datetime_range_to_start_count(start: datetime, end: datetime, interval: Interval, market_flag="ext"):
-    datetime_range_days = (end - start).days
     now = datetime.now().replace(tzinfo=end.tzinfo)
-    now_to_end_days = (now - end).days
+    if end > now:
+        end = now
+
+    datetime_range_days = (end - start).days
+    now_to_end_days = max((now - end).days, 0)
     count = datetime_range_days if datetime_range_days < 7 else (datetime_range_days * 5 / 7)
     count_offset = now_to_end_days if now_to_end_days < 7 else (now_to_end_days * 5 / 7)
 
@@ -53,6 +56,40 @@ def trans_datetime_range_to_start_count(start: datetime, end: datetime, interval
     count = int(count * HOUR_PER_DAY_MAX * units)
     count_offset = int(count_offset * HOUR_PER_DAY_MIN * units)
     return count_offset, count
+
+
+def gen_concat_data(total_count, category, market, code, start, get_bars_func):
+    COUNT_MAX = 700
+
+    if total_count <= COUNT_MAX:
+        data = get_bars_func(
+            category=category, market=market, code=code,
+            start=start, count=total_count
+        )
+    else:
+        data = []
+        while total_count > COUNT_MAX:
+            origin_data_len = len(data)
+
+            data = get_bars_func(
+                category=category, market=market, code=code,
+                start=start, count=COUNT_MAX
+            ) + data
+
+            if origin_data_len == len(data):
+                total_count = 0
+                break
+
+            total_count -= COUNT_MAX
+            start += COUNT_MAX
+
+        if total_count > 0:
+            data = get_bars_func(
+                category=category, market=market, code=code,
+                start=start, count=total_count
+            ) + data
+
+    return data
 
 
 class JotdxDatafeed(BaseDatafeed):
@@ -124,28 +161,11 @@ class JotdxDatafeed(BaseDatafeed):
         else:
             raise ValueError(f"{market} is not TdxMarket attribute value.")
 
-        COUNT_MAX = 700
-
-        if count <= COUNT_MAX:
-            data = get_bar_data_func(
-                category=category, market=market, code=code,
-                start=count_offset, count=count
-            )
-        else:
-            data = []
-            while count > COUNT_MAX:
-                data = get_bar_data_func(
-                    category=category, market=market, code=code,
-                    start=count_offset, count=COUNT_MAX
-                ) + data
-                count -= COUNT_MAX
-                count_offset += COUNT_MAX
-
-            if count > 0:
-                data = get_bar_data_func(
-                    category=category, market=market, code=code,
-                    start=count_offset, count=count
-                ) + data
+        data = gen_concat_data(
+            total_count=count, category=category, market=market, code=code,
+            start=count_offset,
+            get_bars_func=get_bar_data_func
+        )
 
         return data
 
@@ -177,28 +197,11 @@ class JotdxDatafeed(BaseDatafeed):
         else:
             raise ValueError(f"{market} is not TdxMarket attribute value.")
 
-        COUNT_MAX = 700
-
-        if count <= COUNT_MAX:
-            data = get_bars_func(
-                category=category, market=market, code=code,
-                start=count_offset, count=count
-            )
-        else:
-            data = []
-            while count > COUNT_MAX:
-                data = get_bars_func(
-                    category=category, market=market, code=code,
-                    start=count_offset, count=COUNT_MAX
-                ) + data
-                count -= COUNT_MAX
-                count_offset += COUNT_MAX
-
-            if count > 0:
-                data = get_bars_func(
-                    category=category, market=market, code=code,
-                    start=count_offset, count=count
-                ) + data
+        data = gen_concat_data(
+            total_count=count, category=category, market=market, code=code,
+            start=count_offset,
+            get_bars_func=get_bars_func
+        )
 
         return self.to_df(data, market_flag=market_flag)
 
