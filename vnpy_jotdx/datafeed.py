@@ -100,6 +100,7 @@ class JotdxDatafeed(BaseDatafeed):
         self.inited: bool = False
         self.ext_api = None
         self.std_api = None
+        self.sh_index_daily_bar_df = None
 
         self.future_market_category_list = [
             (TdxMarket.DCE, TdxCategory.DCE),
@@ -129,6 +130,9 @@ class JotdxDatafeed(BaseDatafeed):
         stock_best_ip_port_dict = select_best_ip_async(_type='stock')
         self.std_api = TdxHq_API(heartbeat=True)
         self.std_api.connect(ip=stock_best_ip_port_dict['ip'], port=stock_best_ip_port_dict['port'])
+
+        # 记录上证指数 日k线 df, 作为交易日历
+        self.sh_index_daily_bar_df = self.get_sh_index_daily_bar_df()
 
         # self.markets = self.ext_api.to_df(self.ext_api.get_markets())
         self.inited = True
@@ -204,6 +208,30 @@ class JotdxDatafeed(BaseDatafeed):
         )
 
         return self.to_df(data, market_flag=market_flag)
+
+    def get_sh_index_daily_bar_df(self):
+
+        all_df = pd.DataFrame()
+        frequency = INTERVAL_TDX_MAP[Interval.DAILY]
+        # 这里不能用 util 里面的函数去根据code判断market, 因为指数是000001,会被误判为深圳
+        market = TdxMarket.SSE
+        start = 0
+        offset = 700
+
+        while True:
+            temp_df = self.std_api.to_df(
+                self.std_api.get_index_bars(
+                    category=frequency, market=market, code="000001", start=start, count=offset
+                )
+            )
+
+            if temp_df.empty:
+                break
+
+            all_df = pd.concat([temp_df, all_df])
+            start += offset
+
+        return all_df
 
     def to_df(self, data, market_flag="ext"):
         if market_flag == "ext":
@@ -296,11 +324,11 @@ if __name__ == '__main__':
     )
 
     bar_req2 = HistoryRequest(
-        symbol="600123",
+        symbol="000001",
         exchange=Exchange("SSE"),
-        start=datetime(2022, 6, 14),
+        start=datetime(1990, 1, 1),
         end=datetime.now(),
-        interval=Interval.MINUTE
+        interval=Interval.DAILY
     )
 
     bar_req3 = HistoryRequest(
@@ -327,8 +355,8 @@ if __name__ == '__main__':
     # cul8_data = datafeed.query_bar_history(bar_req1)
     # cul8_data_df = datafeed.query_bar_df_history(bar_req1)
     #
-    # sse_data = datafeed.query_bar_history(bar_req2)
-    # sse_data_df = datafeed.query_bar_df_history(bar_req2)
+    sse_data = datafeed.query_bar_history(bar_req2)
+    sse_data_df = datafeed.query_bar_df_history(bar_req2)
     #
     # szse_data = datafeed.query_bar_history(bar_req3)
     # szse_data_df = datafeed.query_bar_df_history(bar_req3)
