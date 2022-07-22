@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "vnpy_jotdx"
-version = "0.1.7"
+version = "0.1.8"
 description = ""
 authors = ["FangyangJz <fangyang.jing@hotmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.7.1"
-joconst = "^0.1.13"
-jotdx = "^0.1.13"
+joconst = "^0.1.14"
+jotdx = "^0.1.16"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
